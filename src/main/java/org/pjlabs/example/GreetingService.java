@@ -52,19 +52,22 @@ public class GreetingService extends GreetingServiceGrpc.GreetingServiceImplBase
       final GreetAllRequest request, final StreamObserver<GreetAllReply> responseObserver) {
     final var names = request.getNamesList();
 
-    final var greetings =
-        PARALLEL.map(names, name -> Blockless.get(downstream.fetchGreeting(name)));
+    // Each parallel task captures its own thread info and MDC — proving propagation
+    final var replies =
+        PARALLEL.map(
+            names,
+            name -> {
+              final var greeting = Blockless.get(downstream.fetchGreeting(name));
+              return GreetReply.newBuilder()
+                  .setMessage(greeting)
+                  .setThreadName(Thread.currentThread().getName())
+                  .setVirtualThread(Thread.currentThread().isVirtual())
+                  .setTraceId(MDC.get("traceId") != null ? MDC.get("traceId") : "")
+                  .build();
+            });
 
     final var replyBuilder = GreetAllReply.newBuilder();
-    for (int i = 0; i < names.size(); i++) {
-      replyBuilder.addReplies(
-          GreetReply.newBuilder()
-              .setMessage(greetings.get(i))
-              .setThreadName(Thread.currentThread().getName())
-              .setVirtualThread(Thread.currentThread().isVirtual())
-              .setTraceId(MDC.get("traceId") != null ? MDC.get("traceId") : "")
-              .build());
-    }
+    replies.forEach(replyBuilder::addReplies);
 
     responseObserver.onNext(replyBuilder.build());
     responseObserver.onCompleted();

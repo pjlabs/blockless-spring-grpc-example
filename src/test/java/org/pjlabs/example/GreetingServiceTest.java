@@ -3,6 +3,14 @@ package org.pjlabs.example;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.inprocess.InProcessChannelBuilder;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.junit.jupiter.api.Test;
 import org.pjlabs.example.proto.GreetAllRequest;
@@ -71,5 +79,70 @@ class GreetingServiceTest {
     assertTrue(
         elapsedMs < 400,
         "expected parallel execution (~100ms) but took " + elapsedMs + "ms — suggests serial");
+  }
+
+  @Test
+  void greetPropagatesTraceIdViaMdc() {
+    final var channel =
+        InProcessChannelBuilder.forName("test")
+            .intercept(traceIdInterceptor("trace-dragon-123"))
+            .usePlaintext()
+            .build();
+
+    try {
+      final var stub = GreetingServiceGrpc.newBlockingStub(channel);
+      final var reply = stub.greet(GreetRequest.newBuilder().setName("Toothless").build());
+
+      assertEquals(
+          "trace-dragon-123",
+          reply.getTraceId(),
+          "traceId from gRPC metadata must propagate to the service via MDC");
+    } finally {
+      channel.shutdownNow();
+    }
+  }
+
+  @Test
+  void greetAllPropagatesTraceIdToAllParallelTasks() {
+    final var channel =
+        InProcessChannelBuilder.forName("test")
+            .intercept(traceIdInterceptor("trace-fanout-456"))
+            .usePlaintext()
+            .build();
+
+    try {
+      final var stub = GreetingServiceGrpc.newBlockingStub(channel);
+      final var reply =
+          stub.greetAll(
+              GreetAllRequest.newBuilder().addNames("A").addNames("B").addNames("C").build());
+
+      assertEquals(3, reply.getRepliesCount());
+      for (final var r : reply.getRepliesList()) {
+        assertEquals(
+            "trace-fanout-456",
+            r.getTraceId(),
+            "traceId must propagate to each parallel task via Parallel.map + MDC");
+      }
+    } finally {
+      channel.shutdownNow();
+    }
+  }
+
+  private static ClientInterceptor traceIdInterceptor(final String traceId) {
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          final MethodDescriptor<ReqT, RespT> method,
+          final CallOptions callOptions,
+          final Channel next) {
+        return new SimpleForwardingClientCall<>(next.newCall(method, callOptions)) {
+          @Override
+          public void start(final Listener<RespT> responseListener, final Metadata headers) {
+            headers.put(Metadata.Key.of("trace-id", Metadata.ASCII_STRING_MARSHALLER), traceId);
+            super.start(responseListener, headers);
+          }
+        };
+      }
+    };
   }
 }
