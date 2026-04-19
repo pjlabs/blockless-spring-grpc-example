@@ -31,6 +31,9 @@ public class SlowDownstreamClient {
               name,
               Thread.currentThread().getName(),
               traceId);
+          if ("FAIL".equals(name)) {
+            throw new RuntimeException("Downstream error for " + name);
+          }
           return "Hello, " + name + "!";
         });
   }
