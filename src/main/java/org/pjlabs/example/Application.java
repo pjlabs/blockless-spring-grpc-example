@@ -1,6 +1,6 @@
 package org.pjlabs.example;
 
-import org.pjlabs.blockless.Blockless;
+import io.github.pjlabs.blockless.Blockless;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 

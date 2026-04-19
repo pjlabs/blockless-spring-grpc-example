@@ -9,8 +9,18 @@ service GreetingService {
   // Single greeting — demonstrates Blockless.get()
   rpc Greet (GreetRequest) returns (GreetReply);
 
-  // Fan-out greeting — demonstrates Parallel.map()
+  // Fan-out greeting — demonstrates Parallel.map() with withMaxConcurrency
   rpc GreetAll (GreetAllRequest) returns (GreetAllReply);
+
+  // Partial failure handling — demonstrates Parallel.toEither()
+  rpc GreetSafe (GreetAllRequest) returns (GreetSafeReply);
+}
+
+message GreetResult {
+  oneof outcome {
+    GreetReply reply = 1;
+    string error = 2;
+  }
 }
 
 message GreetRequest {
@@ -30,4 +40,8 @@ message GreetAllRequest {
 
 message GreetAllReply {
   repeated GreetReply replies = 1;
+}
+
+message GreetSafeReply {
+  repeated GreetResult results = 1;
 }

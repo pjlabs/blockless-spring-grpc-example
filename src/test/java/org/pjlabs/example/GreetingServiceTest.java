@@ -15,6 +15,7 @@ import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.junit.jupiter.api.Test;
 import org.pjlabs.example.proto.GreetAllRequest;
 import org.pjlabs.example.proto.GreetRequest;
+import org.pjlabs.example.proto.GreetResult;
 import org.pjlabs.example.proto.GreetingServiceGrpc;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -126,6 +127,40 @@ class GreetingServiceTest {
     } finally {
       channel.shutdownNow();
     }
+  }
+
+  @Test
+  void greetSafeReturnsPartialResults() {
+    final var request =
+        GreetAllRequest.newBuilder().addNames("Alpha").addNames("FAIL").addNames("Gamma").build();
+
+    final var reply = greetingService.greetSafe(request);
+
+    assertEquals(3, reply.getResultsCount());
+
+    // First succeeds
+    assertEquals(GreetResult.OutcomeCase.REPLY, reply.getResults(0).getOutcomeCase());
+    assertEquals("Hello, Alpha!", reply.getResults(0).getReply().getMessage());
+
+    // Second fails
+    assertEquals(GreetResult.OutcomeCase.ERROR, reply.getResults(1).getOutcomeCase());
+    assertTrue(reply.getResults(1).getError().contains("Downstream error"));
+
+    // Third succeeds
+    assertEquals(GreetResult.OutcomeCase.REPLY, reply.getResults(2).getOutcomeCase());
+    assertEquals("Hello, Gamma!", reply.getResults(2).getReply().getMessage());
+  }
+
+  @Test
+  void greetSafeAllSucceed() {
+    final var request = GreetAllRequest.newBuilder().addNames("A").addNames("B").build();
+
+    final var reply = greetingService.greetSafe(request);
+
+    assertEquals(2, reply.getResultsCount());
+    assertTrue(
+        reply.getResultsList().stream()
+            .allMatch(r -> r.getOutcomeCase() == GreetResult.OutcomeCase.REPLY));
   }
 
   private static ClientInterceptor traceIdInterceptor(final String traceId) {
