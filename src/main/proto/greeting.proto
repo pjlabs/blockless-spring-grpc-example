@@ -45,3 +45,43 @@ message GreetAllReply {
 message GreetSafeReply {
   repeated GreetResult results = 1;
 }
+
+// ─── Benchmark service ───
+
+service BenchmarkService {
+  // Single DB query — compare .join() vs Blockless.get()
+  rpc Query (BenchmarkRequest) returns (BenchmarkReply);
+
+  // Fan-out DB queries — compare serial vs Parallel.map()
+  rpc FanOut (FanOutRequest) returns (FanOutReply);
+}
+
+message BenchmarkRequest {
+  string mode = 1;            // "join" | "blockless"
+  string thread_type = 2;     // "pt" | "vt" (default: uses gRPC handler thread as-is)
+  string country = 3;         // country to query
+  double sleep_seconds = 4;   // pg_sleep per query (0 = no sleep)
+  int32 pt_pool_size = 5;     // PT pool size (0 = availableProcessors)
+  int32 db_pool_size = 6;     // HikariCP max pool size (0 = keep current)
+}
+
+message BenchmarkReply {
+  int32 result = 1;
+  string thread_name = 2;
+  bool virtual_thread = 3;
+  int64 elapsed_ms = 4;
+}
+
+message FanOutRequest {
+  string mode = 1;            // "serial" | "parallel"
+  repeated string countries = 2;
+  double sleep_seconds = 3;
+  int32 max_concurrency = 4;  // for parallel mode (0 = unbounded)
+}
+
+message FanOutReply {
+  repeated int32 results = 1;
+  int64 elapsed_ms = 2;
+  bool virtual_thread = 3;
+  string thread_name = 4;
+}
