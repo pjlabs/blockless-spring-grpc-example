@@ -103,6 +103,17 @@ For fan-out, use `BenchmarkService/FanOut` with `serial` vs `parallel` mode.
 mvn test
 ```
 
+8 tests covering:
+- `Blockless.get()` round-trip
+- `Parallel.map()` fan-out correctness and parallelism (5 x 100ms in <400ms)
+- `Parallel.toEither()` partial failure and all-success cases
+- MDC traceId propagation from gRPC header to each virtual thread
+
+Benchmark IT (requires Docker):
+```sh
+mvn test -Dtest=BlocklessBenchmarkIT
+```
+
 ## Requirements
 
 - Java 21+
