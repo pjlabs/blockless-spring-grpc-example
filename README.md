@@ -80,22 +80,42 @@ grpcurl -plaintext -d '{"mode": "parallel", "countries": ["SE","US","GB","DE","J
 | `pt_pool_size` | int | PT handler pool size (Query only, 0 = availableProcessors) |
 | `db_pool_size` | int | HikariCP max pool size (Query only, 0 = keep current, default 10) |
 
+### HTTP endpoints (for JMeter)
+
+Same logic as gRPC, exposed as HTTP GET on port 8080.
+
+**Single query:**
+```sh
+curl 'http://localhost:8080/benchmark/query?mode=join&country=SE&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/query?mode=blockless&country=SE&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/query?mode=blockless&threadType=pt&ptPoolSize=10&country=SE&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/query?mode=blockless&threadType=vt&country=SE&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/query?mode=join&dbPoolSize=5&country=SE&sleepSeconds=0.05'
+```
+
+**Fan-out:**
+```sh
+curl 'http://localhost:8080/benchmark/fanout?mode=serial&countries=SE,US,GB,DE,JP&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/fanout?mode=parallel&countries=SE,US,GB,DE,JP&sleepSeconds=0.05'
+curl 'http://localhost:8080/benchmark/fanout?mode=parallel&countries=SE,US,GB,DE,JP&sleepSeconds=0.05&maxConcurrency=3'
+```
+
 ## Load testing with JMeter
 
-Concurrency is driven by JMeter (or any gRPC load tool), not the app itself. Each JMeter thread sends one request — N threads = N concurrent requests.
+Each JMeter thread sends one HTTP request — N threads = N concurrent requests.
 
 Example test matrix:
 
-| JMeter threads | mode | thread_type | pt_pool_size | What it tests |
-|---|---|---|---|---|
-| 200 | join | (empty) | — | Baseline: gRPC default handler + direct DB call |
-| 200 | blockless | (empty) | — | Blockless.get() on gRPC default handler |
-| 200 | join | pt | 10 | PT handler pool of 10 + direct DB call |
-| 200 | blockless | pt | 10 | PT handler pool of 10 + Blockless.get() |
-| 200 | join | vt | — | VT handler + direct DB call |
-| 200 | blockless | vt | — | VT handler + Blockless.get() |
-
-For fan-out, use `BenchmarkService/FanOut` with `serial` vs `parallel` mode.
+| JMeter threads | URL | What it tests |
+|---|---|---|
+| 200 | `/benchmark/query?mode=join` | Baseline: direct DB call |
+| 200 | `/benchmark/query?mode=blockless` | Blockless.get() |
+| 200 | `/benchmark/query?mode=join&threadType=pt&ptPoolSize=10` | PT handler (10) + direct |
+| 200 | `/benchmark/query?mode=blockless&threadType=pt&ptPoolSize=10` | PT handler (10) + Blockless |
+| 200 | `/benchmark/query?mode=join&threadType=vt` | VT handler + direct |
+| 200 | `/benchmark/query?mode=blockless&threadType=vt` | VT handler + Blockless |
+| 200 | `/benchmark/fanout?mode=serial` | Serial fan-out |
+| 200 | `/benchmark/fanout?mode=parallel` | Parallel fan-out |
 
 ## Tests
 
