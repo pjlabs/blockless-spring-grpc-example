@@ -13,7 +13,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
   int countByCountry(@Param("country") String country);
 
   @Query(
-      value = "SELECT COUNT(*) FROM products WHERE country = :country AND (SELECT pg_sleep(:sleepSeconds)) IS NOT NULL",
+      value =
+          "SELECT COUNT(*) FROM products WHERE country = :country AND (SELECT pg_sleep(:sleepSeconds)) IS NOT NULL",
       nativeQuery = true)
-  int countByCountryWithDelay(@Param("country") String country, @Param("sleepSeconds") double sleepSeconds);
+  int countByCountryWithDelay(
+      @Param("country") String country, @Param("sleepSeconds") double sleepSeconds);
 }

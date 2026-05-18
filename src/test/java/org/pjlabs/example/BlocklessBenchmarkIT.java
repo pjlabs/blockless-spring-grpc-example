@@ -20,11 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>Run with: mvn test -Dtest=BlocklessBenchmarkIT
  */
-@SpringBootTest(
-    properties = {
-      "grpc.server.port=-1",
-      "spring.jpa.hibernate.ddl-auto=create-drop"
-    })
+@SpringBootTest(properties = {"grpc.server.port=-1", "spring.jpa.hibernate.ddl-auto=create-drop"})
 @Testcontainers
 class BlocklessBenchmarkIT {
 
@@ -93,8 +89,8 @@ class BlocklessBenchmarkIT {
     long total = 0;
     for (int r = 1; r <= ROUNDS; r++) {
       final var elapsed = fireAndWait(usePT, useBlockless);
-      System.out.printf("  %s round %d: %d ms [thread: %s]%n", label, r, elapsed,
-          usePT ? "PT" : "VT");
+      System.out.printf(
+          "  %s round %d: %d ms [thread: %s]%n", label, r, elapsed, usePT ? "PT" : "VT");
       total += elapsed;
     }
 

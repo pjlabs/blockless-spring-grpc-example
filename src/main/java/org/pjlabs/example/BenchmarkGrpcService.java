@@ -1,10 +1,10 @@
 package org.pjlabs.example;
 
+import com.zaxxer.hikari.HikariDataSource;
 import io.github.pjlabs.blockless.Blockless;
 import io.github.pjlabs.blockless.Parallel;
 import io.github.pjlabs.blockless.context.slf4j.Slf4jMdcContextPropagator;
 import io.grpc.stub.StreamObserver;
-import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -21,8 +21,7 @@ import org.pjlabs.example.proto.FanOutRequest;
 @GrpcService
 public class BenchmarkGrpcService extends BenchmarkServiceGrpc.BenchmarkServiceImplBase {
 
-  private static final ExecutorService VT_EXECUTOR =
-      Executors.newVirtualThreadPerTaskExecutor();
+  private static final ExecutorService VT_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final int DEFAULT_PT_POOL = Runtime.getRuntime().availableProcessors();
   private static volatile ExecutorService ptExecutor =
       Executors.newFixedThreadPool(DEFAULT_PT_POOL);
@@ -41,7 +40,8 @@ public class BenchmarkGrpcService extends BenchmarkServiceGrpc.BenchmarkServiceI
   private final ProductRepository productRepository;
   private final HikariDataSource dataSource;
 
-  public BenchmarkGrpcService(final ProductRepository productRepository, final DataSource dataSource) {
+  public BenchmarkGrpcService(
+      final ProductRepository productRepository, final DataSource dataSource) {
     this.productRepository = productRepository;
     this.dataSource = (HikariDataSource) dataSource;
   }
@@ -65,23 +65,26 @@ public class BenchmarkGrpcService extends BenchmarkServiceGrpc.BenchmarkServiceI
     Runnable work =
         () -> {
           final var start = System.nanoTime();
-
-          final int result;
+          BenchmarkReply reply = null;
+          var future = CompletableFuture.supplyAsync(() -> {
+              return productRepository.countByCountryWithDelay(country, sleep);
+          }).thenApply(result -> {
+            final var elapsed = (System.nanoTime() - start) / 1_000_000;
+            return BenchmarkReply.newBuilder()
+                .setResult(result)
+                .setThreadName(Thread.currentThread().getName())
+                .setVirtualThread(Thread.currentThread().isVirtual())
+                .setElapsedMs(elapsed)
+                .build();
+          });
+          
           if ("blockless".equals(mode)) {
-            result = Blockless.get(() -> productRepository.countByCountryWithDelay(country, sleep));
+            reply = Blockless.get(future);
           } else {
-            result = productRepository.countByCountryWithDelay(country, sleep);
+            reply = future.join();
           }
 
-          final var elapsed = (System.nanoTime() - start) / 1_000_000;
-
-          responseObserver.onNext(
-              BenchmarkReply.newBuilder()
-                  .setResult(result)
-                  .setThreadName(Thread.currentThread().getName())
-                  .setVirtualThread(Thread.currentThread().isVirtual())
-                  .setElapsedMs(elapsed)
-                  .build());
+          responseObserver.onNext(reply);
           responseObserver.onCompleted();
         };
 
@@ -112,14 +115,10 @@ public class BenchmarkGrpcService extends BenchmarkServiceGrpc.BenchmarkServiceI
       if (maxConcurrency > 0) {
         parallel = parallel.withMaxConcurrency(maxConcurrency);
       }
-      results =
-          parallel.map(
-              countries, c -> productRepository.countByCountryWithDelay(c, sleep));
+      results = parallel.map(countries, c -> productRepository.countByCountryWithDelay(c, sleep));
     } else {
       results =
-          countries.stream()
-              .map(c -> productRepository.countByCountryWithDelay(c, sleep))
-              .toList();
+          countries.stream().map(c -> productRepository.countByCountryWithDelay(c, sleep)).toList();
     }
 
     final var elapsed = (System.nanoTime() - start) / 1_000_000;
